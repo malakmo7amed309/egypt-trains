@@ -42,10 +42,10 @@ function origin(train) {
   return train.from || 'Alexandria'
 }
 
-function statusFor(depMins, nowMins) {
+function statusFor(depMins, nowMins, isArrival) {
   const diff = depMins - nowMins
-  if (diff < 0) return { key: 'departed', label: 'DEPARTED' }
-  if (diff <= 15) return { key: 'boarding', label: 'BOARDING' }
+  if (diff < 0) return { key: 'departed', label: isArrival ? 'ARRIVED' : 'DEPARTED' }
+  if (diff <= 15) return { key: 'boarding', label: isArrival ? 'ARRIVING' : 'BOARDING' }
   return { key: 'scheduled', label: 'ON TIME' }
 }
 
@@ -122,7 +122,8 @@ export default function App() {
       const st = stationTime(tr, stationIdx)
       if (!st) continue
       const depMins = st.offset ? st.offset * 1440 + toMins(st.time) : toMins(st.time)
-      out.push({ train: tr, time: st.time, depMins })
+      const isArrival = tr.stops[tr.stops.length - 1][0] === stationIdx && tr.stops[0][0] !== stationIdx
+      out.push({ train: tr, time: st.time, depMins, isArrival })
     }
     // upcoming first, then departed (most recent last)
     const upcoming = out.filter((r) => r.depMins >= now.mins).sort((a, b) => a.depMins - b.depMins)
@@ -203,7 +204,9 @@ export default function App() {
         {/* next train hero */}
         {nextDep ? (
           <section className="mt-5 rounded-2xl border border-line bg-panel p-5 sm:p-6">
-            <p className="text-[11px] uppercase tracking-widest text-dim">Next from {STATION_ORDER[stationIdx]}</p>
+            <p className="text-[11px] uppercase tracking-widest text-dim">
+              {nextDep.isArrival ? `Next arrival at ${STATION_ORDER[stationIdx]}` : `Next from ${STATION_ORDER[stationIdx]}`}
+            </p>
             <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
               <div>
                 <FlapText text={terminus(nextDep.train)} className="text-2xl sm:text-4xl" />
@@ -215,7 +218,7 @@ export default function App() {
               <div className="text-right">
                 <FlapText text={nextDep.time} className="text-2xl sm:text-4xl" />
                 <p className="mt-2 font-board text-sm tracking-widest text-signal">
-                  leaves in {countdown(nextDep.depMins, now.mins, now.secs)}
+                  {nextDep.isArrival ? 'arrives in' : 'leaves in'} {countdown(nextDep.depMins, now.mins, now.secs)}
                 </p>
               </div>
             </div>
@@ -233,7 +236,7 @@ export default function App() {
           </div>
           <ul className="divide-y divide-line/60">
             {rows.map((r) => {
-              const st = statusFor(r.depMins, now.mins)
+              const st = statusFor(r.depMins, now.mins, r.isArrival)
               const isNext = nextDep && r.train.no === nextDep.train.no && r.time === nextDep.time
               return (
                 <li
