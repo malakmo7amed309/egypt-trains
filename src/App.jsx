@@ -119,7 +119,7 @@ function AuthModal({ mode, setMode, onClose, onDone }) {
         if (data.session) {
           onDone()
         } else {
-          setMsg({ ok: true, text: 'Account created. Check your email to confirm it, then sign in.' })
+          setMsg({ ok: true, text: 'Account created. Now sign in with your email and password.' })
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
