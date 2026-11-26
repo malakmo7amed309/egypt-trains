@@ -4,7 +4,7 @@ A split-flap (Solari-style) departures board for the Cairo - Alexandria railway 
 
 **Live demo:** https://malakmo7amed309.github.io/egypt-trains/
 
-![Screenshot](docs/screenshot.png)
+![Screenshot](docs/showcase.gif)
 
 ## Standout feature
 
