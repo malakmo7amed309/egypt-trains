@@ -48,3 +48,8 @@ body { font-family: var(--font-body); background: var(--color-ink); color: var(-
   50% { transform: scaleY(0.35); filter: brightness(1.35); }
   100% { transform: scaleY(1); }
 }
+
+@media (max-width: 640px) {
+  .flap { gap: 1px; }
+  .flap-char { width: 0.95em; }
+}

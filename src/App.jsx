@@ -389,8 +389,8 @@ export default function App() {
 
         {/* board */}
         <section ref={boardRef} className="mt-6 overflow-hidden rounded-2xl border border-line bg-panel">
-          <div className="grid grid-cols-[3.2rem_1fr_4.6rem_6.2rem_5.4rem] items-center gap-2 border-b border-line bg-panel2 px-3 py-2 text-[10px] uppercase tracking-widest text-dim sm:grid-cols-[4rem_1fr_6rem_8rem_7rem] sm:px-4">
-            <span>Train</span><span>Destination</span><span className="text-right">Time</span><span className="text-right">Status</span><span className="text-right">Leaves in</span>
+          <div className="grid grid-cols-[2.6rem_1fr_4.4rem_4.4rem] items-center gap-2 border-b border-line bg-panel2 px-3 py-2 text-[10px] uppercase tracking-widest text-dim sm:grid-cols-[4rem_1fr_6rem_8rem_7rem] sm:px-4">
+            <span>Train</span><span>Destination</span><span className="text-right">Time</span><span className="hidden text-right sm:block">Status</span><span className="text-right">Leaves in</span>
           </div>
           <ul className="divide-y divide-line/60">
             {rows.map((r) => {
@@ -399,17 +399,17 @@ export default function App() {
               return (
                 <li
                   key={`${r.train.no}-${r.time}`}
-                  className={`grid grid-cols-[3.2rem_1fr_4.6rem_6.2rem_5.4rem] items-center gap-2 px-3 py-2.5 sm:grid-cols-[4rem_1fr_6rem_8rem_7rem] sm:px-4 ${
+                  className={`grid grid-cols-[2.6rem_1fr_4.4rem_4.4rem] items-center gap-2 px-3 py-2.5 sm:grid-cols-[4rem_1fr_6rem_8rem_7rem] sm:px-4 ${
                     st.key === 'departed' ? 'opacity-35' : ''
                   } ${isNext ? 'bg-signal/10' : ''}`}
                 >
                   <span className="font-board text-sm tracking-wider text-cream">{r.train.no}</span>
-                  <span className="min-w-0">
-                    <FlapText text={terminus(r.train)} className="text-xs sm:text-sm" />
+                  <span className="min-w-0 overflow-hidden">
+                    <FlapText text={terminus(r.train)} className="text-[10px] sm:text-sm" />
                     <span className="mt-0.5 block truncate text-[10px] text-dim">{TYPES[r.train.type]}{r.train.days ? ' - ' + r.train.days.map((d) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(' & ') + ' only' : ''}</span>
                   </span>
                   <span className="text-right"><FlapText text={r.time} className="text-xs sm:text-sm" /></span>
-                  <span className={`text-right font-board text-[10px] tracking-widest sm:text-xs ${
+                  <span className={`hidden text-right font-board text-[10px] tracking-widest sm:block sm:text-xs ${
                     st.key === 'boarding' ? 'text-signal animate-pulse' : st.key === 'departed' ? 'text-dim' : 'text-ok'
                   }`}>{st.label}</span>
                   <span className="text-right font-board text-[10px] tracking-wider text-dim sm:text-xs">
