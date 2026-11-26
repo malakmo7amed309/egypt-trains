@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { supabase } from './supabase'
 import { STATION_ORDER, TRAINS, TYPES } from './data'
 
 const FLAP_CHARS = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:-.'
@@ -101,6 +102,94 @@ function FlapText({ text, className = '' }) {
   )
 }
 
+function AuthModal({ mode, setMode, onClose, onDone }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(null)
+
+  const submit = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    setMsg(null)
+    try {
+      if (mode === 'up') {
+        const { data, error } = await supabase.auth.signUp({ email, password })
+        if (error) throw error
+        if (data.session) {
+          onDone()
+        } else {
+          setMsg({ ok: true, text: 'Account created. Check your email to confirm it, then sign in.' })
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
+        onDone()
+      }
+    } catch (err) {
+      setMsg({ ok: false, text: err.message || 'Something went wrong.' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 px-4" onClick={onClose}>
+      <div
+        className="w-full max-w-sm rounded-2xl border border-line bg-panel p-6"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label={mode === 'up' ? 'Create account' : 'Sign in'}
+      >
+        <h2 className="font-board text-lg tracking-widest">
+          {mode === 'up' ? 'CREATE ACCOUNT' : 'SIGN IN'}
+        </h2>
+        <p className="mt-1 text-xs text-dim">
+          {mode === 'up' ? 'Save your planned trips to your account.' : 'Welcome back aboard.'}
+        </p>
+        <form onSubmit={submit} className="mt-4 space-y-3">
+          <input
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Email"
+            className="w-full rounded-lg border border-line bg-panel2 px-3 py-2 text-sm text-cream placeholder-dim focus:border-signal focus:outline-none"
+          />
+          <input
+            type="password"
+            required
+            minLength={6}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password (6+ characters)"
+            className="w-full rounded-lg border border-line bg-panel2 px-3 py-2 text-sm text-cream placeholder-dim focus:border-signal focus:outline-none"
+          />
+          {msg && (
+            <p className={`text-xs ${msg.ok ? 'text-ok' : 'text-signal'}`}>{msg.text}</p>
+          )}
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full rounded-lg bg-signal px-3 py-2 text-sm font-semibold text-ink transition hover:brightness-110 disabled:opacity-50"
+          >
+            {busy ? 'One moment...' : mode === 'up' ? 'Create account' : 'Sign in'}
+          </button>
+        </form>
+        <div className="mt-4 flex items-center justify-between text-xs">
+          <button
+            onClick={() => { setMode(mode === 'up' ? 'in' : 'up'); setMsg(null) }}
+            className="text-dim hover:text-signal"
+          >
+            {mode === 'up' ? 'Have an account? Sign in' : 'New here? Create an account'}
+          </button>
+          <button onClick={onClose} className="text-dim hover:text-cream">Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [stationIdx, setStationIdx] = useState(0)
   const [dirFilter, setDirFilter] = useState('all') // all | 0 | 1
@@ -108,6 +197,19 @@ export default function App() {
   const [fromIdx, setFromIdx] = useState(0)
   const [toIdx, setToIdx] = useState(16)
   const boardRef = useRef(null)
+
+  const [session, setSession] = useState(null)
+  const [authOpen, setAuthOpen] = useState(false)
+  const [authMode, setAuthMode] = useState('in')
+  const [saveMsg, setSaveMsg] = useState('')
+
+  const trips = session?.user?.user_metadata?.trips || []
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s))
+    return () => sub.subscription.unsubscribe()
+  }, [])
 
   useEffect(() => {
     const t = setInterval(() => setNow(cairoNow()), 1000)
@@ -155,6 +257,42 @@ export default function App() {
 
   const scrollBoard = () => boardRef.current && boardRef.current.scrollIntoView({ behavior: 'smooth' })
 
+  const saveTrips = async (next) => {
+    const { data, error } = await supabase.auth.updateUser({ data: { trips: next } })
+    if (!error && data.user) setSession((s) => ({ ...s, user: data.user }))
+    return !error
+  }
+
+  const saveTrip = async (p) => {
+    const entry = {
+      from: fromIdx,
+      to: toIdx,
+      no: p.train.no,
+      depTime: p.depTime,
+      arrTime: p.arrTime,
+      type: p.train.type,
+    }
+    const exists = trips.some((t) => t.from === entry.from && t.to === entry.to && t.no === entry.no)
+    if (exists) {
+      setSaveMsg('That trip is already in your list.')
+      setTimeout(() => setSaveMsg(''), 3000)
+      return
+    }
+    const ok = await saveTrips([...trips, entry])
+    setSaveMsg(ok ? `Saved: ${STATION_ORDER[entry.from]} to ${STATION_ORDER[entry.to]}, train ${entry.no}.` : 'Could not save - try again.')
+    setTimeout(() => setSaveMsg(''), 3000)
+  }
+
+  const removeTrip = async (idx) => {
+    await saveTrips(trips.filter((_, i) => i !== idx))
+  }
+
+  const signOut = async () => {
+    await supabase.auth.signOut()
+  }
+
+  const userLabel = session?.user?.email || ''
+
   return (
     <div className="min-h-screen bg-ink text-cream">
       <header className="border-b-4 border-signal bg-panel">
@@ -165,9 +303,29 @@ export default function App() {
             </h1>
             <p className="mt-1 text-xs uppercase tracking-widest text-dim">Cairo - Alexandria line - departures board</p>
           </div>
-          <div className="text-right">
-            <FlapText text={now.label} className="text-xl" />
-            <p className="mt-1 text-[11px] uppercase tracking-widest text-dim">{now.dayLabel} - Cairo time</p>
+          <div className="flex items-center gap-4">
+            {session ? (
+              <div className="flex items-center gap-2">
+                <span className="hidden max-w-[10rem] truncate text-xs text-dim sm:inline" title={userLabel}>{userLabel}</span>
+                <button
+                  onClick={signOut}
+                  className="rounded-lg border border-line bg-panel2 px-3 py-2 text-[11px] uppercase tracking-widest text-dim transition hover:border-signal hover:text-signal"
+                >
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setAuthMode('in'); setAuthOpen(true) }}
+                className="rounded-lg bg-signal px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-ink transition hover:brightness-110"
+              >
+                Sign in
+              </button>
+            )}
+            <div className="text-right">
+              <FlapText text={now.label} className="text-xl" />
+              <p className="mt-1 text-[11px] uppercase tracking-widest text-dim">{now.dayLabel} - Cairo time</p>
+            </div>
           </div>
         </div>
       </header>
@@ -265,7 +423,17 @@ export default function App() {
 
         {/* planner */}
         <section className="mt-8 rounded-2xl border border-line bg-panel p-5 sm:p-6">
-          <h2 className="font-board text-lg tracking-widest">WHICH TRAIN DO I CATCH?</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-board text-lg tracking-widest">WHICH TRAIN DO I CATCH?</h2>
+            {!session && (
+              <button
+                onClick={() => { setAuthMode('up'); setAuthOpen(true) }}
+                className="text-[11px] uppercase tracking-widest text-dim hover:text-signal"
+              >
+                Sign in to save trips
+              </button>
+            )}
+          </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <select value={fromIdx} onChange={(e) => setFromIdx(Number(e.target.value))}
               className="rounded-lg border border-line bg-panel2 px-3 py-2 text-sm text-cream focus:border-signal focus:outline-none">
@@ -283,6 +451,7 @@ export default function App() {
               {STATION_ORDER.map((s, i) => <option key={s} value={i}>To: {s}</option>)}
             </select>
           </div>
+          {saveMsg && <p className="mt-3 text-xs text-signal">{saveMsg}</p>}
           {fromIdx === toIdx ? (
             <p className="mt-4 text-sm text-dim">Pick two different stations.</p>
           ) : plan.length === 0 ? (
@@ -302,12 +471,48 @@ export default function App() {
                     <FlapText text={p.arrTime} className="text-sm" />
                     <span className="text-xs text-dim">{Math.floor(p.dur / 60) > 0 ? `${Math.floor(p.dur / 60)}h ` : ''}{p.dur % 60}m ride</span>
                     <span className="font-board text-xs tracking-wider text-signal">in {countdown(p.dep, now.mins, now.secs)}</span>
+                    {session && (
+                      <button
+                        onClick={() => saveTrip(p)}
+                        className="rounded-lg border border-line bg-panel px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-signal transition hover:border-signal"
+                      >
+                        Save
+                      </button>
+                    )}
                   </div>
                 </li>
               ))}
             </ul>
           )}
         </section>
+
+        {/* saved trips */}
+        {session && trips.length > 0 && (
+          <section className="mt-8 rounded-2xl border border-line bg-panel p-5 sm:p-6">
+            <h2 className="font-board text-lg tracking-widest">MY SAVED TRIPS</h2>
+            <ul className="mt-4 space-y-2">
+              {trips.map((t, i) => (
+                <li key={`${t.from}-${t.to}-${t.no}-${i}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-line bg-panel2 px-4 py-3">
+                  <div>
+                    <span className="text-sm text-cream">{STATION_ORDER[t.from]} → {STATION_ORDER[t.to]}</span>
+                    <span className="ml-2 font-board text-xs tracking-wider text-dim">Train {t.no} - {TYPES[t.type] || ''}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-sm">
+                    <FlapText text={t.depTime} className="text-sm" />
+                    <span className="text-dim">→</span>
+                    <FlapText text={t.arrTime} className="text-sm" />
+                    <button
+                      onClick={() => removeTrip(i)}
+                      className="text-[10px] uppercase tracking-wider text-dim hover:text-signal"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </main>
 
       <footer className="mx-auto max-w-5xl px-4 pb-8 pt-2 text-center text-[11px] leading-relaxed text-dim sm:px-6">
@@ -315,6 +520,15 @@ export default function App() {
         Schedules change - always confirm with ENR (enr.gov.eg) or at the station before you travel.
         Sleeper trains run on the days shown only.
       </footer>
+
+      {authOpen && (
+        <AuthModal
+          mode={authMode}
+          setMode={setAuthMode}
+          onClose={() => setAuthOpen(false)}
+          onDone={() => setAuthOpen(false)}
+        />
+      )}
     </div>
   )
 }
